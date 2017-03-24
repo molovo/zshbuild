@@ -1,0 +1,244 @@
+#!/usr/bin/env zsh
+
+###
+# Output usage information and exit
+###
+function _zshbuild_usage() {
+  echo '\033[0;33mUsage:\033[0;m'
+  echo '  zshbuild [options]'
+  echo
+  echo '\033[0;33mOptions:\033[0;m'
+  echo '  -h, --help              Output usage information and exit'
+  echo '  -v, --version           Output version information and exit'
+  echo '  -c, --config <file>     The path to a config file'
+  echo '  -o, --output <file>     The path to write the built executable to'
+  echo '  -s, --sourcemap <file>  The path to write the source map to'
+  echo '      --strip-comments    Whether to strip comments from the built executable'
+  echo '      --strip-blank       Whether to strip blank lines from the built executable'
+}
+
+###
+# Output version information and exit
+###
+function _zshbuild_version() {
+  echo '0.1.0'
+}
+
+###
+# Load config from .build.yml if it exists
+###
+function _zshbuild_config_load() {
+  local configfile="${configfile:-"$PWD/.build.yml"}"
+
+  if [[ -f $configfile ]]; then
+    # Try and parse the config file within a subprocess,
+    # to avoid killing the main thread
+    $(eval $(_zshbuild_config_parse_yaml $configfile) >/dev/null 2>&1)
+    if [[ $? -eq 0 ]]; then
+      # The config file was parsed successfully, so we Perform the parse
+      # again, but this time on the main thread so that the config vars are
+      # loaded into the enviroment
+      eval $(_zshbuild_config_parse_yaml $configfile) >/dev/null 2>&1
+    else
+      # The config file failed to parse, so we report this to the user and exit
+      echo '\033[;31mFailed to parse config file\033[0;m'
+      exit 1
+    fi
+  fi
+
+  # If output was provided via the CLI, override any
+  # value from the config file
+  if [[ -n $out ]]; then
+    shift out
+    zshbuild_config_out="$out"
+  fi
+
+  if [[ ${zshbuild_config_out:0:1} != '/' ]]; then
+    zshbuild_config_out="$PWD/$zshbuild_config_out"
+  fi
+
+  if [[ -z $zshbuild_config_out ]]; then
+    echo '\033[;31mMust provide output file\033[0;m'
+    exit 1
+  fi
+
+  cat /dev/null >! "$zshbuild_config_out"
+
+  if [[ -n $prepend ]]; then
+    zshbuild_config_prepend="$prepend"
+  fi
+
+  if [[ -n $append ]]; then
+    zshbuild_config_append="$append"
+  fi
+
+  echo $zshbuild_config_prepend >> "$zshbuild_config_out"
+
+  # If a sourcemap path was provided by the CLI, use it,
+  # otherwise use the value from the config file. If set
+  # to true, use $out.map
+  if [[ -n $sourcemap ]]; then
+    shift sourcemap
+    if [[ -n $sourcemap ]]; then
+      zshbuild_config_sourcemap=$sourcemap
+    fi
+
+    if [[ -z $zshbuild_config_sourcemap ]]; then
+      zshbuild_config_sourcemap='true'
+    fi
+  fi
+
+  if [[ $zshbuild_config_sourcemap = 'true' ]]; then
+    zshbuild_config_sourcemap="$zshbuild_config_out.map"
+  fi
+
+  if [[ ${zshbuild_config_sourcemap:0:1} != '/' ]]; then
+    zshbuild_config_sourcemap="$PWD/$zshbuild_config_sourcemap"
+  fi
+
+  if [[ -n $zshbuild_config_sourcemap && $zshbuild_config_sourcemap != 'false' ]]; then
+    cat /dev/null >! $zshbuild_config_sourcemap
+  else
+    unset zshbuild_config_sourcemap
+  fi
+
+  if [[ -n $strip_blank ]]; then
+    zshbuild_config_strip_blank='true'
+  fi
+
+  if [[ $zshbuild_config_strip_blank = 'false' ]]; then
+    unset $zshbuild_config_strip_blank
+  fi
+
+  if [[ -n $strip_comments ]]; then
+    zshbuild_config_strip_comments='true'
+  fi
+
+  if [[ $zshbuild_config_strip_comments = 'false' ]]; then
+    unset $zshbuild_config_strip_comments
+  fi
+}
+
+###
+# Parse a YAML config file
+# Based on https://gist.github.com/pkuczynski/8665367
+###
+function _zshbuild_config_parse_yaml() {
+  local s w fs prefix='zshbuild_config'
+  s='[[:space:]]*'
+  w='[a-zA-Z0-9_]*'
+  fs="$(echo @|tr @ '\034')"
+  sed -ne "s|^\(${s}\)\(${w}\)${s}:${s}\"\(.*\)\"${s}\$|\1${fs}\2${fs}\3|p" \
+      -e "s|^\(${s}\)\(${w}\)${s}[:-]${s}\(.*\)${s}\$|\1${fs}\2${fs}\3|p" "$1" |
+  awk -F"${fs}" '{
+  indent = length($1)/2;
+  vname[indent] = $2;
+  for (i in vname) {if (i > indent) {delete vname[i]}}
+      if (length($3) > 0) {
+          vn=""; for (i=0; i<indent; i++) {vn=(vn)(vname[i])("_")}
+          printf("%s_%s%s=(\"%s\")\n", "'"$prefix"'",vn, $2, $3);
+      }
+  }' | sed 's/_=/+=/g'
+}
+
+###
+# Process an included file
+###
+function _zshbuild_process() {
+  local filename="$1"
+  integer line_no=0
+
+  # Load the contents of the file into a variable
+  # and loop through each line
+  lines="$(cat $filename)"
+  for line in ${(@f)lines}; do
+    # Increment line numbers
+    line_no=$(( line_no + 1 ))
+
+    # If blank line stripping is enabled, and the line is blank, skip it
+    if [[ -n $zshbuild_config_strip_blank ]]; then
+      if [[ $line =~ '^\s*$' ]]; then
+        continue
+      fi
+    fi
+
+    # If comment stripping is enabled, and the line contains
+    # a comment, skip it
+    if [[ -n $zshbuild_config_strip_comments ]]; then
+      if [[ $line =~ '^\s*#.*[^"]$' ]]; then
+        continue
+      fi
+    fi
+
+    # Since we're going to print a line now,
+    # increment the output line number
+    output_line_no=$(( output_line_no + 1 ))
+
+    # If sourcemaps are enabled, record the mapping in the format
+    # 'line_in_output:source_file:line_in_source'
+    if [[ -n $zshbuild_config_sourcemap ]]; then
+      echo "$output_line_no:$filename:$line_no" >> $zshbuild_config_sourcemap
+    fi
+
+    # Print the line to the output script, escaping newline characters
+    echo ${(p)line//\\\n/\\\\\n} >> $zshbuild_config_out
+  done
+}
+
+###
+# The main zshbuild process
+###
+function _zshbuild() {
+  local help version configfile sourcemap out \
+        prepend append strip_comments strip_blank_lines
+  integer output_line_no=0
+
+  zparseopts -D \
+    h=help -help=help \
+    v=version -version=version \
+    c:=configfile -config:=configfile \
+    s::=sourcemap -sourcemap::=sourcemap \
+    o:=out -out:=out \
+    -prepend=prepend \
+    -append=append \
+    -strip-comments=strip_comments \
+    -strip-blank=strip_blank
+
+  if [[ -n $help ]]; then
+    _zshbuild_usage
+    exit
+  fi
+
+  if [[ -n $version ]]; then
+    _zshbuild_version
+    exit
+  fi
+
+  if [[ -n $configfile ]]; then
+    shift configfile
+  fi
+
+  _zshbuild_config_load
+
+  # Get a list of files either from the CLI,
+  # or from the include list in config file
+  files="$@"
+  if [[ -z $files ]]; then
+    files=$zshbuild_config_include
+  fi
+
+  for file in ${~files}; do
+    if [[ -f $file ]]; then
+      file="$PWD/$file"
+    fi
+
+    if [[ ! -f $file ]]; then
+      echo "\033[;31mFile $file not found\033[0;m"
+      exit 1
+    fi
+
+    _zshbuild_process $file
+  done
+}
+
+_zshbuild "$@"
