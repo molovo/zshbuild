@@ -8,13 +8,15 @@ function _zshbuild_usage() {
   echo '  zshbuild [options]'
   echo
   echo '\033[0;33mOptions:\033[0;m'
-  echo '  -h, --help              Output usage information and exit'
-  echo '  -v, --version           Output version information and exit'
-  echo '  -c, --config <file>     The path to a config file'
-  echo '  -o, --output <file>     The path to write the built executable to'
-  echo '  -s, --sourcemap <file>  The path to write the source map to'
-  echo '      --strip-comments    Whether to strip comments from the built executable'
-  echo '      --strip-blank       Whether to strip blank lines from the built executable'
+  echo '  -h, --help                Output usage information and exit'
+  echo '  -v, --version             Output version information and exit'
+  echo '  -c, --config <file>       The path to a config file'
+  echo '  -o, --output <file>       The path to write the built executable to'
+  echo '  -s, --sourcemap [<file>]  Generate a sourcemap'
+  echo '      --strip-comments      Strip comments from the built executable'
+  echo '      --strip-blank         Strip blank lines from the built executable'
+  echo '      --prepend             A string to prepend to the start of the output'
+  echo '      --append              A string to append to the end of the output'
 }
 
 ###

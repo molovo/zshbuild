@@ -1,0 +1,19 @@
+#compdef zshbuild
+
+function _zshbuild() {
+  typeset -A opt_args
+  local context state line curcontext="$curcontext"
+
+  _arguments -A \
+    '(-h --help)'{-h,--help}'[show help text and exit]' \
+    '(-v --version)'{-v,--version}'[show version information and exit]' \
+    '(-c --config)'{-c,--config}'[specify a configuration file to use]' \
+    '(-o --output)'{-o,--output}'[specify the path to the output executable]' \
+    '--sourcemap[generate a sourcemap, with an optional path to write to]' \
+    '--strip-comments[strip comments from the built executable]' \
+    '--strip-blank[strip blank lines from the built executable]' \
+    '--prepend[a string to prepend to the start of the output]' \
+    '--append[a string to append to the end of the output]'
+}
+
+_zshbuild "$@"
