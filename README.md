@@ -81,7 +81,7 @@ Strips comments from the compiled executable.
 zshbuild --strip-comments --out my_app src/**/*.zsh
 ```
 
-#### `--prepend`
+#### `--prepend <text>`
 
 Specifies text to be prepended to the start of the compiled executable
 
@@ -89,7 +89,7 @@ Specifies text to be prepended to the start of the compiled executable
 zshbuild --prepend '#!/usr/bin/env zsh' --out my_app src/**/*.zsh
 ```
 
-#### `--prepend`
+#### `--append <text>`
 
 Specifies text to be appended to the end of the compiled executable
 
