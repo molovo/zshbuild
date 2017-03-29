@@ -126,7 +126,7 @@ All contributions are welcome, and encouraged. Please read our [contribution gui
 
 Copyright (c) 2017 James Dinsdale <hi@molovo.co> (molovo.co)
 
-ZUnit is licensed under The MIT License (MIT)
+zshbuild is licensed under The MIT License (MIT)
 
 ## Team
 
